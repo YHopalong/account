@@ -131,6 +131,32 @@
   .btn.soft{background:var(--mint-bg);color:var(--mint-d);box-shadow:none;}
   .btn.danger{background:#fff;color:var(--red);border:1.5px solid #F3C9C4;box-shadow:none;}
   .btn-row{display:flex;gap:10px;margin-top:6px;}
+  /* ---------- 修改记录弹窗 ---------- */
+  .rec{cursor:pointer;transition:background .12s;}
+  .rec:active{background:var(--mint-bg);}
+  .modal-mask{position:fixed;inset:0;background:rgba(46,66,60,.45);z-index:60;display:flex;align-items:flex-end;justify-content:center;padding:0;}
+  .modal{background:var(--cream);width:100%;max-width:480px;border-radius:24px 24px 0 0;padding:18px 18px calc(20px + env(safe-area-inset-bottom));max-height:92vh;overflow:auto;box-shadow:0 -8px 30px rgba(0,0,0,.18);animation:slideUp .25s ease;}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+  .modal-head h3{margin:0;font-size:19px;color:var(--ink);font-weight:800;}
+  .modal-x{border:none;background:transparent;font-size:28px;line-height:1;color:var(--ink2);cursor:pointer;padding:0 4px;}
+  @keyframes slideUp{from{transform:translateY(40px);opacity:.6}to{transform:translateY(0);opacity:1}}
+  @media(min-width:769px){
+    .modal-mask{align-items:center;padding:20px;}
+    .modal{border-radius:24px;}
+  }
+  .cat-row{display:flex;gap:8px;align-items:stretch;}
+  .cat-row .grow{flex:1;}
+  .btn-ghost{flex:0 0 auto;min-height:48px;padding:0 16px;border-radius:14px;border:1.5px dashed var(--mint);background:var(--mint-bg);color:var(--mint-d);font-size:14px;font-weight:700;cursor:pointer;}
+  .btn-ghost:active{transform:scale(.98);}
+  .cat-add{display:flex;gap:8px;margin-top:10px;align-items:center;}
+  .cat-add input{flex:1;}
+  .cat-add .btn{width:auto;min-height:46px;padding:10px 18px;flex:0 0 auto;}
+  .cat-add .btn-ghost{flex:0 0 auto;padding:0 14px;}
+  .cat-custom{margin-top:12px;}
+  .cat-custom-label{font-size:12px;color:var(--ink2);margin-bottom:8px;}
+  .chip{display:inline-flex;align-items:center;gap:4px;background:var(--mint-bg);border:1px solid var(--mint-l);color:var(--mint-d);font-size:13px;font-weight:700;padding:6px 8px 6px 12px;border-radius:20px;margin:0 6px 6px 0;}
+  .chip-x{border:none;background:transparent;color:var(--mint-d);font-size:18px;line-height:1;cursor:pointer;padding:0 2px;}
+  input[type=date]{font-family:inherit;}
 
   /* ---------- Records list ---------- */
   .rec{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px dashed var(--line);}
@@ -276,7 +302,7 @@
       <div class="card">
         <div class="card-title"><span id="icCal2"></span> 本月速览</div>
         <div class="grid g3" id="homeMonthMini"></div>
-        <div class="hint">完整月度固定 / 弹性支出拆解，请到「月度总结」页查看。</div>
+        <div class="hint" onclick="showPage('month')" style="cursor:pointer;">完整月度固定 / 弹性支出拆解，请到「月度总结」页查看。<span style="text-decoration:underline;color:var(--mint-d);margin-left:4px;">点击前往 →</span></div>
       </div>
     </section>
 
@@ -288,10 +314,21 @@
           <button data-type="expense" class="on">支出</button>
           <button data-type="income">收入</button>
         </div>
+        <label class="fld">日期</label>
+        <input type="date" id="rdate">
         <label class="fld">金额（¥）</label>
         <input type="number" id="amt" inputmode="decimal" placeholder="0.00" min="0" step="0.01">
         <label class="fld">分类</label>
-        <select id="cat"></select>
+        <div class="cat-row">
+          <select id="cat" class="grow"></select>
+          <button type="button" class="btn-ghost" id="addCatBtn">＋ 类别</button>
+        </div>
+        <div class="cat-add" id="catAddBox" hidden>
+          <input id="newCat" placeholder="如：宠物 / 学习 / 人情" maxlength="10">
+          <button class="btn" id="newCatOk">添加</button>
+          <button class="btn-ghost" id="newCatCancel">取消</button>
+        </div>
+        <div class="cat-custom" id="catCustomWrap" hidden></div>
         <label class="fld">备注（可选）</label>
         <textarea id="note" placeholder="例如：午饭+奶茶 / 房租水电"></textarea>
         <div class="btn-row">
@@ -476,9 +513,44 @@
   <button data-page="home" class="on"><span id="tHome"></span>首页</button>
   <button data-page="record"><span id="tBook"></span>记账</button>
   <button data-page="wage"><span id="tCoin"></span>时薪</button>
+  <button data-page="month"><span id="tCal"></span>月度</button>
   <button data-page="goal"><span id="tTarget"></span>目标</button>
   <button data-page="settings"><span id="tGear"></span>设置</button>
 </nav>
+
+<!-- 修改记录弹窗 -->
+<div class="modal-mask" id="editMask" hidden>
+  <div class="modal" id="editModal">
+    <div class="modal-head">
+      <h3>修改记录</h3>
+      <button type="button" class="modal-x" id="editClose" aria-label="关闭">×</button>
+    </div>
+    <div class="seg" id="editTypeSeg">
+      <button type="button" data-type="expense" class="on">支出</button>
+      <button type="button" data-type="income">收入</button>
+    </div>
+    <label class="fld">日期</label>
+    <input type="date" id="mDate">
+    <label class="fld">金额（¥）</label>
+    <input type="number" id="mAmount" inputmode="decimal" placeholder="0.00" min="0" step="0.01">
+    <label class="fld">分类</label>
+    <div class="cat-row">
+      <select id="mCat" class="grow"></select>
+      <button type="button" class="btn-ghost" id="mAddCatBtn">＋ 类别</button>
+    </div>
+    <div class="cat-add" id="mCatAddBox" hidden>
+      <input id="mNewCat" placeholder="如：宠物 / 学习 / 人情" maxlength="10">
+      <button class="btn" id="mNewCatOk">添加</button>
+      <button class="btn-ghost" id="mNewCatCancel">取消</button>
+    </div>
+    <label class="fld">备注（可选）</label>
+    <textarea id="mNote" placeholder="备注"></textarea>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn danger" id="editDelete" style="flex:0 0 auto;width:auto;padding:0 18px;">删除</button>
+      <button class="btn" id="editSave">保存修改</button>
+    </div>
+  </div>
+</div>
 
 <div id="toast"></div>
 
@@ -538,6 +610,7 @@ function catIcon(cat){
   const m={工资:'coin',餐饮:'fork',交通:'',购物:'',居住:'',娱乐:'',医疗:'',收入:'coin',其他:''};
   return I[m[cat]||'fork'];
 }
+function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 /* ---------- 默认（演示）数据 ---------- */
 function defaultState(){
@@ -562,6 +635,7 @@ function defaultState(){
       goal:{ freedomFundTarget:50000, safetyCushionMonths:6, monthlyFixedExpense:3000, monthlyBudget:4000 },
       fixedCategories:['居住','房租','房贷','保险','订阅','话费']
     },
+    customCats:{expense:[],income:[]},
     records:recs
   };
 }
@@ -571,7 +645,7 @@ let state;
 function load(){
   try{
     const raw=localStorage.getItem(LS_KEY);
-    if(raw){ state=JSON.parse(raw); if(!state.settings) state=defaultState(); }
+    if(raw){ state=JSON.parse(raw); if(!state.customCats) state.customCats={expense:[],income:[]}; if(!state.settings) state=defaultState(); }
     else { state=defaultState(); save(); }
   }catch(e){ state=defaultState(); }
 }
@@ -666,7 +740,7 @@ function renderRecent(){
 }
 function recRow(r){
   const wh = (r.workHours!=null) ? `<div class="wh">≈ ${workLabel(r.workHours)}</div>` : '';
-  return `<div class="rec">
+  return `<div class="rec" data-id="${r.id}">
     <div class="ic" style="color:${r.type==='expense'?'var(--red)':'var(--green)'}">${catIcon(r.category)}</div>
     <div class="mid"><div class="t">${r.category}${r.demo?'<span class="tag-demo">示例</span>':''}</div>
       <div class="s">${r.note||'—'} · ${r.date.slice(5)}</div></div>
@@ -689,11 +763,35 @@ function renderHomeMonthMini(){
 
 /* ---------- 记账 ---------- */
 let curType='expense';
+function catOptionsFor(type){ return (type==='expense'?CATS_EXP:CATS_INC).concat(state.customCats[type]||[]); }
 function renderRecord(){
-  // category options
-  const cats = curType==='expense'?CATS_EXP:CATS_INC;
-  $('#cat').innerHTML=cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  // category options: 默认类别 + 我的自定义类别
+  const cats = catOptionsFor(curType);
+  $('#cat').innerHTML=cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  // 我的类别（可删除）
+  const cw=$('#catCustomWrap');
+  if(custom.length){
+    cw.hidden=false;
+    cw.innerHTML='<div class="cat-custom-label">我的类别（点 × 可删除）</div>'+custom.map(c=>`<span class="chip">${esc(c)}<button type="button" class="chip-x" data-c="${esc(c)}" aria-label="删除">×</button></span>`).join('');
+  } else { cw.hidden=true; cw.innerHTML=''; }
+  // 日期默认今天（切换收支类型时保留已选日期）
+  if(!$('#rdate').value) $('#rdate').value=fmt(new Date());
   $('#wageHint').textContent= money(getWage().realWage)+' / 小时';
+}
+function addCustomCat(){
+  const v=$('#newCat').value.trim();
+  if(!v){ toast('请输入类别名'); return; }
+  const arr=state.customCats[curType];
+  if(arr.includes(v)){ toast('该类别已存在'); $('#cat').value=v; $('#catAddBox').hidden=true; return; }
+  arr.push(v); save(); renderRecord(); $('#cat').value=v; $('#catAddBox').hidden=true;
+  toast('已添加类别：'+v);
+}
+function removeCustomCat(c){
+  const arr=state.customCats[curType];
+  const i=arr.indexOf(c);
+  if(i<0) return;
+  arr.splice(i,1); save(); renderRecord();
+  toast('已删除类别：'+c);
 }
 function doSave(){
   const amt=parseFloat($('#amt').value);
@@ -702,7 +800,7 @@ function doSave(){
   const note=$('#note').value.trim();
   const w=getWage().realWage;
   const wh = curType==='expense' ? amt/w : null; // 仅支出换算成工作时间
-  const rec={id:uid(),type:curType,amount:amt,category:cat,note:note,date:fmt(new Date()),workHours:wh,_t:Date.now(),demo:false};
+  const rec={id:uid(),type:curType,amount:amt,category:cat,note:note,date:$('#rdate').value||fmt(new Date()),workHours:wh,_t:Date.now(),demo:false};
   state.records.push(rec);
   save();
   $('#amt').value=''; $('#note').value='';
@@ -714,6 +812,53 @@ function doSave(){
   }
   renderRecent(); renderHome();
   toast('已保存');
+}
+
+/* ---------- 修改 / 删除记录 ---------- */
+let editingId=null, editingType='expense';
+function openEdit(id){
+  const r=state.records.find(x=>x.id===id);
+  if(!r) return;
+  editingId=id; editingType=r.type;
+  $$('#editTypeSeg button').forEach(b=>b.classList.toggle('on', b.dataset.type===r.type));
+  $('#mDate').value=r.date;
+  $('#mAmount').value=r.amount;
+  $('#mCat').innerHTML=catOptionsFor(r.type).map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  $('#mCat').value=r.category;
+  $('#mNote').value=r.note||'';
+  $('#mCatAddBox').hidden=true; $('#mNewCat').value='';
+  $('#editMask').hidden=false;
+}
+function closeEdit(){ $('#editMask').hidden=true; editingId=null; }
+function doEditSave(){
+  if(!editingId) return;
+  const r=state.records.find(x=>x.id===editingId);
+  if(!r) return closeEdit();
+  const amt=parseFloat($('#mAmount').value);
+  if(!amt||amt<=0){ toast('请输入有效金额'); return; }
+  const w=getWage().realWage;
+  r.type=editingType;
+  r.amount=amt;
+  r.category=$('#mCat').value;
+  r.note=$('#mNote').value.trim();
+  r.date=$('#mDate').value||fmt(new Date());
+  r.workHours = r.type==='expense' ? (w>0?amt/w:null) : null;
+  save(); closeEdit(); renderAll(); toast('已保存修改');
+}
+function doEditDelete(){
+  if(!editingId) return;
+  state.records=state.records.filter(x=>x.id!==editingId);
+  save(); closeEdit(); renderAll(); toast('已删除该记录');
+}
+function mAddCustomCat(){
+  const v=$('#mNewCat').value.trim();
+  if(!v){ toast('请输入类别名'); return; }
+  const arr=state.customCats[editingType];
+  if(arr.includes(v)){ toast('该类别已存在'); $('#mCat').value=v; $('#mCatAddBox').hidden=true; return; }
+  arr.push(v); save();
+  $('#mCat').innerHTML=catOptionsFor(editingType).map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  $('#mCat').value=v; $('#mCatAddBox').hidden=true;
+  toast('已添加类别：'+v);
 }
 
 /* ---------- 时薪 ---------- */
@@ -917,6 +1062,29 @@ function bind(){
     b.classList.add('on'); curType=b.dataset.type; renderRecord();
   }));
   $('#saveBtn').addEventListener('click',doSave);
+  // 自定义类别
+  $('#addCatBtn').addEventListener('click',()=>{ const b=$('#catAddBox'); b.hidden=!b.hidden; if(!b.hidden){ $('#newCat').value=''; $('#newCat').focus(); } });
+  $('#newCatCancel').addEventListener('click',()=>{ $('#catAddBox').hidden=true; });
+  $('#newCatOk').addEventListener('click',addCustomCat);
+  $('#newCat').addEventListener('keydown',e=>{ if(e.key==='Enter') addCustomCat(); });
+  $('#catCustomWrap').addEventListener('click',e=>{ const x=e.target.closest('.chip-x'); if(x) removeCustomCat(x.dataset.c); });
+  // 修改 / 删除记录：点击记录行打开弹窗
+  const openFromList=el=>{ const row=el.closest('.rec'); if(row&&row.dataset.id) openEdit(row.dataset.id); };
+  $('#recentList').addEventListener('click',e=>openFromList(e.target));
+  $('#monthList').addEventListener('click',e=>openFromList(e.target));
+  $('#editClose').addEventListener('click',closeEdit);
+  $('#editMask').addEventListener('click',e=>{ if(e.target===e.currentTarget) closeEdit(); });
+  $('#editSave').addEventListener('click',doEditSave);
+  $('#editDelete').addEventListener('click',doEditDelete);
+  $$('#editTypeSeg button').forEach(b=>b.addEventListener('click',()=>{
+    $$('#editTypeSeg button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); editingType=b.dataset.type;
+    $('#mCat').innerHTML=catOptionsFor(editingType).map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  }));
+  $('#mAddCatBtn').addEventListener('click',()=>{ const b=$('#mCatAddBox'); b.hidden=!b.hidden; if(!b.hidden){ $('#mNewCat').value=''; $('#mNewCat').focus(); } });
+  $('#mNewCatCancel').addEventListener('click',()=>{ $('#mCatAddBox').hidden=true; });
+  $('#mNewCatOk').addEventListener('click',mAddCustomCat);
+  $('#mNewCat').addEventListener('keydown',e=>{ if(e.key==='Enter') mAddCustomCat(); });
   // wage inputs
   ['w_monthly','w_pay','w_cost','w_days','w_site','w_commute','w_ot'].forEach(id=>{
     $('#'+id).addEventListener('input',()=>{
@@ -1008,7 +1176,7 @@ function injectIcons(){
     icBook2:'book',icCal2:'cal',icCoin2:'coin',icBook3:'book',icPie:'pie',icStar:'star',icShield:'shield',
     icTrend:'trend',icSlider2:'slider',icBars:'bars',icData:'data',icBroom:'broom',icBroom2:'broom',
     icWarn:'warn',icDown:'down',icUp:'up',icTarget2:'target',icPlus:'plus',
-    tHome:'home',tBook:'book',tCoin:'coin',tTarget:'target',tGear:'gear'};
+    tHome:'home',tBook:'book',tCoin:'coin',tCal:'cal',tTarget:'target',tGear:'gear'};
   for(const [id,key] of Object.entries(map)){ const el=$('#'+id); if(el) el.innerHTML=I[key]; }
   $('#pigBrand').innerHTML=PIG;
 }
