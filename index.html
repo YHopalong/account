@@ -160,6 +160,15 @@
   .fold-btn:hover{background:var(--mint-l);}
   .fold-btn svg{width:18px;height:18px;pointer-events:none;}
   .fold-btn.open{background:var(--mint-l);}
+  .attr-list{margin-top:6px;}
+  .attr-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px dashed var(--line);flex-wrap:wrap;}
+  .attr-row .an{font-weight:700;color:var(--ink);font-size:14px;flex:0 0 auto;min-width:74px;}
+  .attr-row.sub .an{color:var(--ink2);font-weight:600;padding-left:18px;min-width:74px;}
+  .attr-opts{display:flex;gap:8px;margin-left:auto;}
+  .attr-opt{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;padding:6px 12px;border-radius:20px;border:1.5px solid var(--line);background:var(--cream);color:var(--ink2);cursor:pointer;user-select:none;}
+  .attr-opt input{display:none;}
+  .attr-opt.on.fixed{background:var(--mint-bg);border-color:var(--mint);color:var(--mint-d);}
+  .attr-opt.on.flex{background:#FFF1E6;border-color:#F6C66B;color:#C8841E;}
   .cat-custom{margin-top:12px;}
   /* 月度明细：饼图区 */
   .pie-zone{margin-top:12px;border-top:1px dashed var(--line);padding-top:12px;}
@@ -565,13 +574,25 @@
         </div>
       </div>
       <div class="card dash">
-        <div class="card-title" style="color:var(--red);"><span id="icWarn"></span> 危险区</div>
-        <div class="hint">清空全部数据不可恢复，请先导出备份。</div>
-        <div class="btn-row">
+        <div class="fold-head" id="dangerHead">
+          <span class="fold-title" style="color:var(--red);"><span id="icWarn"></span> 危险区</span>
+          <button type="button" class="fold-btn" id="dangerToggle" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        </div>
+        <div class="hint" id="dangerHint" hidden>清空全部数据不可恢复，请先导出备份。</div>
+        <div class="btn-row" id="dangerBtnRow" hidden>
           <button class="btn danger" id="clearAllBtn">清空全部数据</button>
         </div>
       </div>
 
+      <div class="card">
+        <div class="fold-head" id="attrHead">
+          <span class="fold-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;vertical-align:-3px;margin-right:4px;"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>支出属性（固定 / 弹性）</span>
+          <button type="button" class="fold-btn" id="attrToggle" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" style="width:18px;height:18px;pointer-events:none;"><path d="M12 5v14M5 12h14"/></svg></button>
+        </div>
+        <div class="hint" id="attrHint" hidden>标记每类支出是「固定」（房租、话费等每月必花）还是「弹性」（可省的可变开销）。选了子类别按子类别判定，否则按一级类别。</div>
+        <div id="attrList" hidden></div>
+        <div class="btn-row" id="attrBtnRow" hidden><button class="btn" id="saveAttrBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> 保存支出属性</button></div>
+      </div>
       <div class="card">
         <div class="card-title"><span id="icTarget2"></span> 目标参数</div>
         <label class="fld">自由基金目标（¥）</label>
@@ -725,7 +746,8 @@ function defaultState(){
     settings:{
       wage:{ monthlyTakeHome:8000, payMonths:12, workCost:600, onSite:9, commute:1.5, overtime:1, workDays:22 },
       goal:{ freedomFundTarget:50000, safetyCushionMonths:6, monthlyFixedExpense:3000, monthlyBudget:4000 },
-      fixedCategories:['居住','房租','房贷','保险','订阅','话费']
+      fixedCategories:['居住','房租','房贷','保险','订阅','话费'],
+      attrMap:{}
     },
     cats:DEF_CATS(),
     records:recs
@@ -737,7 +759,14 @@ let state;
 function load(){
   try{
     const raw=localStorage.getItem(LS_KEY);
-    if(raw){ state=JSON.parse(raw); if(!state.cats) migrateCats(); if(!state.settings) state=defaultState(); }
+    if(raw){ state=JSON.parse(raw); if(!state.cats) migrateCats(); if(!state.settings) state=defaultState();
+      // 迁移：旧数据可能没有 attrMap（固定/弹性标记），从 fixedCategories 预填一级类别为 fixed
+      if(!state.settings.attrMap) state.settings.attrMap={};
+      if(Object.keys(state.settings.attrMap).length===0 && Array.isArray(state.settings.fixedCategories)){
+        state.settings.fixedCategories.forEach(c=>{ state.settings.attrMap[c]='fixed'; });
+        save();
+      }
+    }
     else { state=defaultState(); save(); }
   }catch(e){ state=defaultState(); }
 }
@@ -925,6 +954,13 @@ function toggleCatMgmt(head, wrap, hint){
   head.querySelector('.fold-btn').setAttribute('aria-expanded', String(open));
   head.querySelector('.fold-btn').innerHTML = open ? I.minus : I.plus;
 }
+function toggleAttr(head, els){
+  const open = els[0].hidden;           // 当前隐藏 → 即将展开
+  els.forEach(e=>{ e.hidden = !open; });
+  head.querySelector('.fold-btn').classList.toggle('open', open);
+  head.querySelector('.fold-btn').setAttribute('aria-expanded', String(open));
+  head.querySelector('.fold-btn').innerHTML = open ? I.minus : I.plus;
+}
 function renderRecord(){
   const cats = state.cats[curType]||[];
   $('#cat').innerHTML = cats.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
@@ -1105,7 +1141,7 @@ function renderMonth(){
   const exp=recs.filter(r=>r.type==='expense').reduce((s,r)=>s+r.amount,0);
   const bal=inc-exp;
   const fixedCats=state.settings.fixedCategories;
-  const fixed=recs.filter(r=>r.type==='expense'&&fixedCats.includes(r.category)).reduce((s,r)=>s+r.amount,0);
+  const fixed=recs.filter(r=>r.type==='expense'&&attrOf(r.category,r.sub)==='fixed').reduce((s,r)=>s+r.amount,0);
   const flex=exp-fixed;
   $('#monthStats').innerHTML=`
     <div class="stat"><div class="k">${I.coin} 月收入</div><div class="v green">${money(inc)}</div></div>
@@ -1312,6 +1348,53 @@ function updateSim(){
 }
 
 /* ---------- 设置 ---------- */
+// 判定某条支出的属性：子类别标记优先，否则用一级标记，再回退 fixedCategories
+function attrOf(category, sub){
+  const m=state.settings.attrMap||{};
+  if(sub){ const k=category+'::'+sub; if(m[k]) return m[k]; }
+  if(m[category]) return m[category];
+  if((state.settings.fixedCategories||[]).includes(category)) return 'fixed';
+  return 'flex';
+}
+function renderAttrSettings(){
+  const cats=state.cats.expense||[];
+  const m=state.settings.attrMap||{};
+  const rows=cats.map(c=>{
+    const cur=m[c.name]||((state.settings.fixedCategories||[]).includes(c.name)?'fixed':'flex');
+    let html=`<div class="attr-row"><span class="an">${esc(c.name)}</span><span class="attr-opts">`
+      +`<label class="attr-opt fixed ${cur==='fixed'?'on':''}"><input type="radio" name="attr_${esc(c.name)}" value="fixed" ${cur==='fixed'?'checked':''}>固定</label>`
+      +`<label class="attr-opt flex ${cur==='flex'?'on':''}"><input type="radio" name="attr_${esc(c.name)}" value="flex" ${cur==='flex'?'checked':''}>弹性</label>`
+      +`</span></div>`;
+    (c.subs||[]).forEach(s=>{
+      const ck=c.name+'::'+s;
+      const sc=m[ck]||cur;
+      html+=`<div class="attr-row sub"><span class="an">${esc(c.name)}·${esc(s)}</span><span class="attr-opts">`
+        +`<label class="attr-opt fixed ${sc==='fixed'?'on':''}"><input type="radio" name="attr_${esc(ck)}" value="fixed" ${sc==='fixed'?'checked':''}>固定</label>`
+        +`<label class="attr-opt flex ${sc==='flex'?'on':''}"><input type="radio" name="attr_${esc(ck)}" value="flex" ${sc==='flex'?'checked':''}>弹性</label>`
+        +`</span></div>`;
+    });
+    return html;
+  }).join('');
+  $('#attrList').innerHTML = rows || '<div class="empty">暂无支出类别</div>';
+}
+function saveAttrSettings(){
+  const m=state.settings.attrMap;
+  (state.cats.expense||[]).forEach(c=>{
+    const r=document.querySelector(`input[name="attr_${CSS.escape(c.name)}"]:checked`);
+    if(r) m[c.name]=r.value;
+    (c.subs||[]).forEach(s=>{
+      const ck=c.name+'::'+s;
+      const sr=document.querySelector(`input[name="attr_${CSS.escape(ck)}"]:checked`);
+      if(sr) m[ck]=sr.value;
+    });
+  });
+  // 同步回写 fixedCategories，供未升级的旧读取处兼容
+  state.settings.fixedCategories = (state.cats.expense||[])
+    .filter(c=>m[c.name]==='fixed' && !(c.subs||[]).some(s=>m[c.name+'::'+s]==='flex'))
+    .map(c=>c.name);
+  save(); renderMonth();
+  toast('支出属性已保存');
+}
 function renderSettings(){
   $('#setDemoBanner').innerHTML = state.demo? '<div class="demo-banner">'+I.info+' 当前含<b style="margin:0 4px;">示例数据</b>（记录带"示例"标签）。</div>':'';
   const g=state.settings.goal;
@@ -1319,6 +1402,7 @@ function renderSettings(){
   $('#g_safe').value=g.safetyCushionMonths;
   $('#g_fixed').value=g.monthlyFixedExpense;
   $('#g_budget').value=g.monthlyBudget;
+  renderAttrSettings();
 }
 
 /* =========================================================
@@ -1398,6 +1482,10 @@ function bind(){
     btn.setAttribute('aria-expanded',String(open));
     btn.innerHTML=open?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
   });
+  // 支出属性卡片折叠（默认不展开）
+  $('#attrHead').addEventListener('click',()=>toggleAttr($('#attrHead'),[$('#attrHint'),$('#attrList'),$('#attrBtnRow')]));
+  // 危险区卡片折叠（默认不展开）
+  $('#dangerHead').addEventListener('click',()=>toggleAttr($('#dangerHead'),[$('#dangerHint'),$('#dangerBtnRow')]));
   // 饼图下拉联动
   $('#catPieSelect').addEventListener('change',renderCatPie);
   // 月度总结：主类别 + 号展开/收起子类别明细 / 明细分组
@@ -1431,6 +1519,8 @@ function bind(){
     state.settings.goal.monthlyBudget=parseFloat($('#g_budget').value)||0;
     save(); renderGoal(); renderHome(); toast('目标参数已保存');
   });
+  // 支出属性（固定/弹性）保存
+  $('#saveAttrBtn').addEventListener('click',saveAttrSettings);
 }
 function showPage(p){
   $$('.page').forEach(s=>s.classList.remove('active'));
