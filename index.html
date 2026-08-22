@@ -161,6 +161,19 @@
   .fold-btn svg{width:18px;height:18px;pointer-events:none;}
   .fold-btn.open{background:var(--mint-l);}
   .cat-custom{margin-top:12px;}
+  /* 月度明细：饼图区 */
+  .pie-zone{margin-top:12px;border-top:1px dashed var(--line);padding-top:12px;}
+  .pie-select-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .pie-label{font-size:13px;font-weight:600;color:var(--ink2);flex:0 0 auto;}
+  .pie-layout{display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+  .pie-svg{flex:0 0 140px;width:140px;height:140px;}
+  .pie-svg svg{width:140px;height:140px;display:block;}
+  .pie-legend{flex:1;min-width:140px;display:flex;flex-direction:column;gap:6px;}
+  .pie-legend .lg{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);}
+  .pie-legend .lg i{width:12px;height:12px;border-radius:3px;flex:0 0 auto;}
+  .pie-legend .lg .lg-n{font-weight:600;}
+  .pie-legend .lg .lg-v{margin-left:auto;color:var(--ink2);font-weight:700;}
+  .pie-legend .lg .lg-p{color:var(--ink2);font-size:11px;width:42px;text-align:right;}
   .cat-custom-label{font-size:12px;color:var(--ink2);margin-bottom:8px;}
   .chip{display:inline-flex;align-items:center;gap:4px;background:var(--mint-bg);border:1px solid var(--mint-l);color:var(--mint-d);font-size:13px;font-weight:700;padding:6px 8px 6px 12px;border-radius:20px;margin:0 6px 6px 0;}
   .chip.sub{background:var(--cream);border-color:var(--line);color:var(--ink2);font-weight:600;}
@@ -442,8 +455,21 @@
         </div>
       </div>
       <div class="card">
-        <div class="card-title"><span id="icBook3"></span> 本月明细</div>
-        <div id="monthList"></div>
+        <div class="fold-head" id="monthDetailHead">
+          <span class="fold-title"><span id="icBook3"></span> 本月明细</span>
+          <button type="button" class="fold-btn" id="monthDetailToggle" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        </div>
+        <div id="monthList" hidden></div>
+        <div class="pie-zone">
+          <div class="pie-select-row">
+            <label class="pie-label">类别占比</label>
+            <select id="catPieSelect" class="grow"></select>
+          </div>
+          <div class="pie-layout">
+            <div id="catPie" class="pie-svg"></div>
+            <div id="catPieLegend" class="pie-legend"></div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -1092,6 +1118,9 @@ function renderMonth(){
   // list: 按日期倒序直接平铺
   const list=recs.slice().sort((a,b)=>a.date<b.date?1:-1);
   $('#monthList').innerHTML= list.length? list.map(r=>recRow(r)).join('') : '<div class="empty">本月暂无记录</div>';
+  // 饼图：下拉选项 + 饼图（默认"全部类别"）
+  renderCatPieSelect();
+  renderCatPie();
 }
 function catBars(recs,type,only,exclude){
   const exp=recs.filter(r=>r.type===type);
@@ -1118,6 +1147,61 @@ function catBars(recs,type,only,exclude){
     }
     const expBtn=hasSub?`<button type="button" class="exp" aria-label="展开子类别">+</button>`:'';
     return `<div class="cat-block"><div class="bar-row">${expBtn}<div class="nm">${esc(c)}</div><div class="track"><i style="width:${v/max*100}%"></i></div><div class="val">${money(v)}</div></div>${subHtml}</div>`;
+  }).join('');
+}
+
+/* ---------- 月度饼图（类别占比） ---------- */
+const PIE_COLORS=['#7FD1AE','#F4A9B8','#F6C66B','#8FB8E8','#C9A7E8','#E8A07A','#9ED0C0','#E89BB0','#BBD98A','#88C0D0'];
+// 计算当前 viewMonth 的支出记录
+function monthExpenseRecs(){
+  const y=viewMonth.getFullYear(), m=viewMonth.getMonth();
+  return state.records.filter(r=>{ if(r.type!=='expense') return false; const d=parseD(r.date); return d.getFullYear()===y&&d.getMonth()===m; });
+}
+// cat==='' 时汇总一级类别；否则汇总该类别下各子类别（无子项的归入"未细分"）
+function pieData(cat){
+  const recs=monthExpenseRecs();
+  const map={};
+  recs.forEach(r=>{
+    let key;
+    if(!cat){ key=r.category; }
+    else { if(r.category!==cat) return; key=r.sub?r.sub:'未细分'; }
+    map[key]=(map[key]||0)+r.amount;
+  });
+  const entries=Object.entries(map).sort((a,b)=>b[1]-a[1]);
+  const total=entries.reduce((s,e)=>s+e[1],0);
+  return {entries,total};
+}
+function renderCatPieSelect(){
+  const sel=$('#catPieSelect'); if(!sel) return;
+  const cats=(state.cats.expense||[]).map(c=>c.name);
+  sel.innerHTML='<option value="">全部类别</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+}
+function renderCatPie(){
+  const sel=$('#catPieSelect');
+  const cat=sel?sel.value:'';
+  const {entries,total}=pieData(cat);
+  const box=$('#catPie'); const legend=$('#catPieLegend');
+  if(!box) return;
+  if(!total){
+    box.innerHTML='<svg viewBox="0 0 42 42"><circle cx="21" cy="21" r="15.915" fill="none" stroke="#EDEDE8" stroke-width="6"/></svg>';
+    legend.innerHTML='<div class="hint">本月暂无支出</div>';
+    return;
+  }
+  // 画环形饼图（stroke-dasharray 方式）
+  const R=15.915, C=2*Math.PI*R;
+  let offset=0; let arcs='';
+  entries.forEach(([name,val],i)=>{
+    const frac=val/total;
+    const len=frac*C;
+    const color=PIE_COLORS[i%PIE_COLORS.length];
+    arcs+=`<circle cx="21" cy="21" r="${R}" fill="none" stroke="${color}" stroke-width="6" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-offset}" transform="rotate(-90 21 21)"></circle>`;
+    offset+=len;
+  });
+  box.innerHTML=`<svg viewBox="0 0 42 42">${arcs}</svg>`;
+  legend.innerHTML=entries.map(([name,val],i)=>{
+    const pct=(val/total*100).toFixed(1);
+    const color=PIE_COLORS[i%PIE_COLORS.length];
+    return `<div class="lg"><i style="background:${color}"></i><span class="lg-n">${esc(name)}</span><span class="lg-v">${money(val)}</span><span class="lg-p">${pct}%</span></div>`;
   }).join('');
 }
 
@@ -1304,6 +1388,18 @@ function bind(){
   // month nav
   $('#prevMonth').addEventListener('click',()=>{viewMonth=new Date(viewMonth.getFullYear(),viewMonth.getMonth()-1,1);renderMonth();});
   $('#nextMonth').addEventListener('click',()=>{viewMonth=new Date(viewMonth.getFullYear(),viewMonth.getMonth()+1,1);renderMonth();});
+  // 本月明细折叠（默认不展开）
+  $('#monthDetailHead').addEventListener('click',()=>{
+    const list=$('#monthList');
+    const open=list.hidden;
+    list.hidden=!open;
+    const btn=$('#monthDetailToggle');
+    btn.classList.toggle('open',open);
+    btn.setAttribute('aria-expanded',String(open));
+    btn.innerHTML=open?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+  });
+  // 饼图下拉联动
+  $('#catPieSelect').addEventListener('change',renderCatPie);
   // 月度总结：主类别 + 号展开/收起子类别明细 / 明细分组
   // 月度总结：支出结构主类别 + 号展开/收起子类别明细（仅作用于 .cat-block 内的 .sub-detail）
   document.getElementById('page-month').addEventListener('click',e=>{
