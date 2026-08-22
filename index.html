@@ -154,6 +154,12 @@
   .cat-add input{flex:1;}
   .cat-add .btn{width:auto;min-height:46px;padding:10px 18px;flex:0 0 auto;}
   .cat-add .btn-ghost{flex:0 0 auto;padding:0 14px;}
+  .fold-head{display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin:12px 0 4px;user-select:none;}
+  .fold-title{font-size:13px;font-weight:600;color:var(--ink2);}
+  .fold-btn{width:30px;height:30px;border-radius:50%;border:1.5px solid var(--mint-l);background:var(--cream);color:var(--mint-d);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:transform .15s ease,background .15s ease;position:relative;}
+  .fold-btn:hover{background:var(--mint-l);}
+  .fold-btn svg{width:18px;height:18px;pointer-events:none;}
+  .fold-btn.open{background:var(--mint-l);}
   .cat-custom{margin-top:12px;}
   .cat-custom-label{font-size:12px;color:var(--ink2);margin-bottom:8px;}
   .chip{display:inline-flex;align-items:center;gap:4px;background:var(--mint-bg);border:1px solid var(--mint-l);color:var(--mint-d);font-size:13px;font-weight:700;padding:6px 8px 6px 12px;border-radius:20px;margin:0 6px 6px 0;}
@@ -361,8 +367,11 @@
         </div>
         <label class="fld">子类别（可选）</label>
         <select id="sub" class="grow"></select>
-        <label class="fld">分类管理</label>
-        <div class="hint" style="margin:-4px 0 8px;">点「删类」删除该类别（至少保留一个）；点子类别上的 × 删除子项。</div>
+        <div class="fold-head" id="catMgmtHead">
+          <span class="fold-title">分类管理</span>
+          <button type="button" class="fold-btn" id="catMgmtToggle" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        </div>
+        <div class="hint" id="catMgmtHint" hidden>点「删类」删除该类别（至少保留一个）；点子类别上的 × 删除子项。</div>
         <div class="cat-custom" id="catCustomWrap" hidden></div>
         <label class="fld">备注（可选）</label>
         <textarea id="note" placeholder="例如：午饭+奶茶 / 房租水电"></textarea>
@@ -625,6 +634,7 @@ const I = {
   slider:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2.2"/><circle cx="8" cy="17" r="2.2"/></svg>',
   gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>',
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  minus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>',
   down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>',
   up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V9M7 13l5-5 5 5M5 4h14"/></svg>',
   broom:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5l-7 7M14 4l6 6-9 9-3 0 0-3z"/></svg>',
@@ -869,19 +879,32 @@ function renderHomeMonthMini(){
 let curType='expense';
 function catOptionsFor(type){ return (state.cats[type]||[]).map(c=>c.name); }
 function getSubs(type,catName){ const c=(state.cats[type]||[]).find(x=>x.name===catName); return c?c.subs.slice():[]; }
+// 渲染某收支类型的分类管理列表（仅填充内容，不控制展开/收起，保持当前折叠状态）
+function renderCatMgmt(type, wrapEl){
+  if(!wrapEl) return;
+  const cats = state.cats[type]||[];
+  if(cats.length){
+    wrapEl.innerHTML = cats.map(c=>{
+      const subs=(c.subs||[]).map(s=>`<span class="chip sub">${esc(s)}<button type="button" class="chip-x" data-sub="${esc(c.name)}" data-s="${esc(s)}" aria-label="删除子类别">×</button></span>`).join('');
+      return `<div class="cat-mgmt-row"><span class="cat-name">${esc(c.name)}</span>${subs?`<span class="subs">${subs}</span>`:''}<button type="button" class="chip-x cat-del" data-c="${esc(c.name)}" aria-label="删除类别">删类</button></div>`;
+    }).join('');
+  } else { wrapEl.innerHTML=''; }
+}
+// 分类管理折叠：toggle 控制展开/收起，按钮图标在 +/- 间切换
+function toggleCatMgmt(head, wrap, hint){
+  const open = wrap.hidden;            // 当前隐藏 → 即将展开
+  wrap.hidden = !open;
+  if(hint) hint.hidden = !open;
+  head.querySelector('.fold-btn').classList.toggle('open', open);
+  head.querySelector('.fold-btn').setAttribute('aria-expanded', String(open));
+  head.querySelector('.fold-btn').innerHTML = open ? I.minus : I.plus;
+}
 function renderRecord(){
   const cats = state.cats[curType]||[];
   $('#cat').innerHTML = cats.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
   renderSubOptions(curType, $('#cat').value);
-  // 分类管理：列出全部类别（含默认），可删除类别 / 子类别
-  const cw=$('#catCustomWrap');
-  if(cats.length){
-    cw.hidden=false;
-    cw.innerHTML = cats.map(c=>{
-      const subs=(c.subs||[]).map(s=>`<span class="chip sub">${esc(s)}<button type="button" class="chip-x" data-sub="${esc(c.name)}" data-s="${esc(s)}" aria-label="删除子类别">×</button></span>`).join('');
-      return `<div class="cat-mgmt-row"><span class="cat-name">${esc(c.name)}</span>${subs?`<span class="subs">${subs}</span>`:''}<button type="button" class="chip-x cat-del" data-c="${esc(c.name)}" aria-label="删除类别">删类</button></div>`;
-    }).join('');
-  } else { cw.hidden=true; cw.innerHTML=''; }
+  // 分类管理：列出全部类别（含默认），可删除类别 / 子类别（默认折叠，由 +/- 控制展开）
+  renderCatMgmt(curType, $('#catCustomWrap'));
   // 日期默认今天（切换收支类型时保留已选日期）
   if(!$('#rdate').value) $('#rdate').value=fmt(new Date());
   $('#wageHint').textContent= money(getWage().realWage)+' / 小时';
@@ -1244,6 +1267,8 @@ function bind(){
     const del=e.target.closest('.cat-del'); if(del){ removeCategory(curType, del.dataset.c); return; }
     const sx=e.target.closest('.chip-x'); if(sx&&sx.dataset.sub){ removeSub(curType, sx.dataset.sub, sx.dataset.s); }
   });
+  // 分类管理折叠：点 + 展开 / 点 − 收起（标题行或按钮均可触发）
+  $('#catMgmtHead').addEventListener('click',()=>toggleCatMgmt($('#catMgmtHead'),$('#catCustomWrap'),$('#catMgmtHint')));
   // 修改 / 删除记录：点击记录行打开弹窗
   const openFromList=el=>{ const row=el.closest('.rec'); if(row&&row.dataset.id) openEdit(row.dataset.id); };
   $('#recentList').addEventListener('click',e=>openFromList(e.target));
@@ -1327,13 +1352,18 @@ function showPage(p){
 }
 
 /* ---------- 导入导出 ---------- */
+// 本地时间戳（YYYY-MM-DD_HH-MM-SS），用于备份文件名；用短横线避免 iOS 文件名禁用冒号
+function tsName(){
+  const d=new Date();
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'_'+pad(d.getHours())+'-'+pad(d.getMinutes())+'-'+pad(d.getSeconds());
+}
 function exportJSON(){
   const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download='打工人小账本_备份_'+fmt(new Date())+'.json';
+  a.download='打工人小账本_'+tsName()+'.json';
   a.click(); URL.revokeObjectURL(a.href);
-  toast('已导出备份');
+  toast('已导出备份（'+tsName()+'）');
 }
 function importJSON(e){
   const f=e.target.files[0]; if(!f) return;
@@ -1374,7 +1404,7 @@ function injectIcons(){
     icBook2:'book',icCal2:'cal',icCoin2:'coin',icBook3:'book',icPie:'pie',icStar:'star',icShield:'shield',
     icTrend:'trend',icSlider2:'slider',icBars:'bars',icData:'data',icBroom:'broom',icBroom2:'broom',
     icWarn:'warn',icDown:'down',icUp:'up',icTarget2:'target',icPlus:'plus',
-    icCloud:'cloud',icRestore:'restore',
+    icCloud:'cloud',icRestore:'restore',icMinus:'minus',
     tHome:'home',tBook:'book',tCoin:'coin',tCal:'cal',tTarget:'target',tGear:'gear'};
   for(const [id,key] of Object.entries(map)){ const el=$('#'+id); if(el) el.innerHTML=I[key]; }
   $('#pigBrand').innerHTML=PIG;
