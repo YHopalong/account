@@ -97,6 +97,9 @@
   .g3{grid-template-columns:repeat(3,1fr);}
   .g4{grid-template-columns:repeat(4,1fr);}
   .stat{background:var(--card);border-radius:18px;padding:14px 16px;box-shadow:var(--shadow-s);border:1px solid var(--line);}
+  .stat[data-scope]{cursor:pointer;transition:transform .12s ease,box-shadow .12s ease;}
+  .stat[data-scope]:hover{box-shadow:0 4px 16px rgba(74,140,116,.18);}
+  .stat[data-scope]:active{transform:scale(.97);}
   .stat .k{font-size:12px;color:var(--ink2);display:flex;align-items:center;gap:5px;}
   .stat .k svg{width:14px;height:14px;stroke:var(--mint-d);}
   .stat .v{font-size:23px;font-weight:800;margin-top:5px;color:var(--ink);}
@@ -137,6 +140,7 @@
   .rec{cursor:pointer;transition:background .12s;}
   .rec:active{background:var(--mint-bg);}
   .modal-mask{position:fixed;inset:0;background:rgba(46,66,60,.45);z-index:60;display:flex;align-items:flex-end;justify-content:center;padding:0;}
+  #editMask{z-index:70;}
   .modal{background:var(--cream);width:100%;max-width:480px;border-radius:24px 24px 0 0;padding:18px 18px calc(20px + env(safe-area-inset-bottom));max-height:92vh;overflow:auto;box-shadow:0 -8px 30px rgba(0,0,0,.18);animation:slideUp .25s ease;}
   .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
   .modal-head h3{margin:0;font-size:19px;color:var(--ink);font-weight:800;}
@@ -662,6 +666,16 @@
   </div>
 </div>
 
+<div class="modal-mask" id="listMask" hidden>
+  <div class="modal" id="listModal">
+    <div class="modal-head">
+      <h3 id="listTitle">记录清单</h3>
+      <button type="button" class="modal-x" id="listClose" aria-label="关闭">×</button>
+    </div>
+    <div id="listBody"></div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -884,9 +898,9 @@ function renderHome(){
   const remain=budget-mExp;
 
   $('#homeStats').innerHTML=`
-    <div class="stat"><div class="k">${I.cal} 今日支出</div><div class="v red">${money(tExp)}</div></div>
-    <div class="stat"><div class="k">${I.coin} 今日收入</div><div class="v green">${money(tInc)}</div></div>
-    <div class="stat"><div class="k">${I.book} 本月支出</div><div class="v red">${money(mExp)}</div></div>
+    <div class="stat" data-scope="today" data-type="expense"><div class="k">${I.cal} 今日支出</div><div class="v red">${money(tExp)}</div></div>
+    <div class="stat" data-scope="today" data-type="income"><div class="k">${I.coin} 今日收入</div><div class="v green">${money(tInc)}</div></div>
+    <div class="stat" data-scope="month" data-type="expense"><div class="k">${I.book} 本月支出</div><div class="v red">${money(mExp)}</div></div>
     <div class="stat"><div class="k">${I.star} 本月预算剩</div><div class="v ${remain<0?'red':'green'}">${money(remain)}</div></div>`;
 
   // nudge
@@ -1054,6 +1068,29 @@ function openEdit(id){
   $('#editMask').hidden=false;
 }
 function closeEdit(){ $('#editMask').hidden=true; editingId=null; }
+let listFilter=null;
+function refreshList(){ if(listFilter) openList(listFilter.scope, listFilter.type); }
+function openList(scope, type){
+  listFilter={scope,type};
+  const now=new Date();
+  let recs, label;
+  if(scope==='today'){
+    const key=fmt(now);
+    recs=state.records.filter(r=>r.date===key && r.type===type);
+    label = (type==='expense'?'今日支出':'今日收入');
+  } else {
+    const y=now.getFullYear(), m=now.getMonth();
+    recs=state.records.filter(r=>{const d=parseD(r.date);return d.getFullYear()===y&&d.getMonth()===m&&r.type===type;});
+    label='本月支出';
+  }
+  recs.sort((a,b)=> a.date<b.date?1:(a.date>b.date?-1:((b._t||0)-(a._t||0))));
+  const sum=recs.reduce((s,r)=>s+r.amount,0);
+  $('#listTitle').textContent = label+' · '+recs.length+' 笔 · '+money(sum);
+  const body=$('#listBody');
+  body.innerHTML = recs.length ? recs.map(r=>recRow(r)).join('') : '<div class="empty">暂无记录</div>';
+  $('#listMask').hidden=false;
+}
+function closeList(){ $('#listMask').hidden=true; }
 function doEditSave(){
   if(!editingId) return;
   const r=state.records.find(x=>x.id===editingId);
@@ -1068,12 +1105,12 @@ function doEditSave(){
   r.note=$('#mNote').value.trim();
   r.date=$('#mDate').value||fmt(new Date());
   r.workHours = r.type==='expense' ? (w>0?amt/w:null) : null;
-  save(); closeEdit(); renderAll(); toast('已保存修改');
+  save(); closeEdit(); renderAll(); if(!$('#listMask').hidden) refreshList(); toast('已保存修改');
 }
 function doEditDelete(){
   if(!editingId) return;
   state.records=state.records.filter(x=>x.id!==editingId);
-  save(); closeEdit(); renderAll(); toast('已删除该记录');
+  save(); closeEdit(); renderAll(); if(!$('#listMask').hidden) refreshList(); toast('已删除该记录');
 }
 function mAddCustomCat(){
   const v=$('#mNewCat').value.trim();
@@ -1443,6 +1480,15 @@ function bind(){
   $('#monthList').addEventListener('click',e=>{ if(e.target.closest('.exp')) return; openFromList(e.target); });
   $('#editClose').addEventListener('click',closeEdit);
   $('#editMask').addEventListener('click',e=>{ if(e.target===e.currentTarget) closeEdit(); });
+  // 首页统计卡片 → 打开对应记录清单
+  $('#homeStats').addEventListener('click',e=>{
+    const st=e.target.closest('.stat[data-scope]');
+    if(st) openList(st.dataset.scope, st.dataset.type);
+  });
+  // 记录清单弹窗
+  $('#listClose').addEventListener('click',closeList);
+  $('#listMask').addEventListener('click',e=>{ if(e.target===e.currentTarget) closeList(); });
+  $('#listBody').addEventListener('click',e=>{ const row=e.target.closest('.rec'); if(row&&row.dataset.id) openEdit(row.dataset.id); });
   $('#editSave').addEventListener('click',doEditSave);
   $('#editDelete').addEventListener('click',doEditDelete);
   $$('#editTypeSeg button').forEach(b=>b.addEventListener('click',()=>{
