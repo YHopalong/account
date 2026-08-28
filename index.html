@@ -246,6 +246,8 @@
   .bar-row .val{width:74px;flex:0 0 74px;text-align:right;font-weight:700;color:var(--ink);}
   /* 月度总结：主类别 + 展开子类别明细 */
   .cat-block{margin:6px 0;}
+  .cat-block .bar-row[data-cat]{cursor:pointer;}
+  .cat-block .bar-row[data-cat]:hover .nm{text-decoration:underline;}
   .exp{width:26px;height:26px;flex:0 0 auto;border-radius:50%;border:1.5px solid var(--mint-l);background:var(--cream);color:var(--mint-d);font-size:18px;font-weight:700;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:transform .15s ease,background .15s ease;}
   .exp:hover{background:var(--mint-l);}
   .exp.open{transform:rotate(45deg);background:var(--mint-l);}
@@ -1091,9 +1093,9 @@ function openEdit(id){
 }
 function closeEdit(){ $('#editMask').hidden=true; editingId=null; }
 let listFilter=null;
-function refreshList(){ if(listFilter) openList(listFilter.scope, listFilter.type, listFilter.date); }
-function openList(scope, type, date){
-  listFilter={scope,type,date};
+function refreshList(){ if(listFilter) openList(listFilter.scope, listFilter.type, listFilter.date, listFilter.cat, listFilter.sub); }
+function openList(scope, type, date, cat, sub){
+  listFilter={scope,type,date,cat,sub};
   const now=new Date();
   let recs, label;
   if(scope==='today'){
@@ -1110,6 +1112,8 @@ function openList(scope, type, date){
     recs=state.records.filter(r=>{const d=parseD(r.date);return d.getFullYear()===y&&d.getMonth()===m&&r.type===type;});
     label=(date?`${y}年${m+1}月`:'本月')+(type==='expense'?'支出':'收入');
   }
+  if(cat){ recs=recs.filter(r=>r.category===cat); label=label+' · '+cat; }
+  if(sub){ recs=recs.filter(r=>r.sub===sub); label=label+' · '+sub; }
   recs.sort((a,b)=> a.date<b.date?1:(a.date>b.date?-1:((b._t||0)-(a._t||0))));
   const sum=recs.reduce((s,r)=>s+r.amount,0);
   $('#listTitle').textContent = label+' · '+recs.length+' 笔 · '+money(sum);
@@ -1274,11 +1278,11 @@ function catBars(recs,type,only,exclude){
       const se=Object.entries(bySub).sort((a,b)=>b[1]-a[1]);
       const smax=Math.max(1,...se.map(e=>e[1]));
       subHtml='<div class="sub-detail" hidden>'+se.map(([s,sv])=>
-        `<div class="bar-row sub"><div class="nm">${esc(s)}</div><div class="track"><i style="width:${sv/smax*100}%"></i></div><div class="val">${money(sv)}</div></div>`
+        `<div class="bar-row sub" data-cat="${esc(c)}" data-sub="${esc(s)}"><div class="nm">${esc(s)}</div><div class="track"><i style="width:${sv/smax*100}%"></i></div><div class="val">${money(sv)}</div></div>`
       ).join('')+'</div>';
     }
     const expBtn=hasSub?`<button type="button" class="exp" aria-label="展开子类别">+</button>`:'';
-    return `<div class="cat-block"><div class="bar-row">${expBtn}<div class="nm">${esc(c)}</div><div class="track"><i style="width:${v/max*100}%"></i></div><div class="val">${money(v)}</div></div>${subHtml}</div>`;
+    return `<div class="cat-block"><div class="bar-row" data-cat="${esc(c)}">${expBtn}<div class="nm">${esc(c)}</div><div class="track"><i style="width:${v/max*100}%"></i></div><div class="val">${money(v)}</div></div>${subHtml}</div>`;
   }).join('');
 }
 
@@ -1549,6 +1553,15 @@ function bind(){
     const st=e.target.closest('.stat[data-scope]');
     if(st) openList(st.dataset.scope, st.dataset.type, st.dataset.date);
   });
+  // 支出结构：点击类别 / 子类别 → 打开该类别当月支出清单
+  const openCatFromBars=e=>{
+    if(e.target.closest('.exp')) return;
+    const row=e.target.closest('.bar-row[data-cat]');
+    if(!row) return;
+    openList('month','expense',fmt(viewMonth), row.dataset.cat, row.dataset.sub||null);
+  };
+  $('#fixedBars').addEventListener('click',openCatFromBars);
+  $('#flexBars').addEventListener('click',openCatFromBars);
   // 记录清单弹窗
   $('#listClose').addEventListener('click',closeList);
   $('#listMask').addEventListener('click',e=>{ if(e.target===e.currentTarget) closeList(); });
