@@ -282,6 +282,23 @@
 
   .empty{text-align:center;color:var(--ink2);padding:26px 10px;font-size:14px;}
 
+  /* ---------- 月度日历 ---------- */
+  .cal-card{margin-bottom:16px;}
+  .cal-week{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:8px;}
+  .cal-w{text-align:center;font-size:12px;font-weight:700;color:var(--ink2);padding:2px 0;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .cal-cell{
+    min-height:62px;border-radius:12px;background:var(--cream);padding:7px 6px;
+    display:flex;flex-direction:column;gap:3px;justify-content:flex-start;
+  }
+  .cal-empty{background:transparent;}
+  .cal-day{font-size:13px;font-weight:700;color:var(--ink);}
+  .cal-amt{margin-top:auto;font-size:12px;font-weight:700;color:var(--red);cursor:pointer;line-height:1.2;}
+  .cal-amt:hover{text-decoration:underline;}
+  .cal-amt.cal-zero{color:var(--ink2);font-weight:600;cursor:default;text-decoration:none;}
+  .cal-today{background:var(--mint-bg);box-shadow:0 0 0 1.5px var(--mint-d) inset;}
+  .cal-today .cal-day{color:var(--mint-d);}
+
   /* ---------- Bottom tab (mobile) ---------- */
   .tabbar{display:none;}
   @media(max-width:768px){
@@ -483,6 +500,11 @@
             <div id="catPieLegend" class="pie-legend"></div>
           </div>
         </div>
+      </div>
+      <div class="card cal-card">
+        <div class="card-title"><span id="icCal3"></span> 月度日历</div>
+        <div class="hint" style="margin-bottom:10px;">每个日期下方为当天支出总额，点击金额可查看当天支出明细。</div>
+        <div id="monthCal"></div>
       </div>
     </section>
 
@@ -1069,19 +1091,24 @@ function openEdit(id){
 }
 function closeEdit(){ $('#editMask').hidden=true; editingId=null; }
 let listFilter=null;
-function refreshList(){ if(listFilter) openList(listFilter.scope, listFilter.type); }
-function openList(scope, type){
-  listFilter={scope,type};
+function refreshList(){ if(listFilter) openList(listFilter.scope, listFilter.type, listFilter.date); }
+function openList(scope, type, date){
+  listFilter={scope,type,date};
   const now=new Date();
   let recs, label;
   if(scope==='today'){
     const key=fmt(now);
     recs=state.records.filter(r=>r.date===key && r.type===type);
     label = (type==='expense'?'今日支出':'今日收入');
+  } else if(scope==='day'){
+    recs=state.records.filter(r=>r.date===date && r.type===type);
+    label=`${date} 支出`;
   } else {
-    const y=now.getFullYear(), m=now.getMonth();
+    let y,m;
+    if(date){ const dd=parseD(date); y=dd.getFullYear(); m=dd.getMonth(); }
+    else { y=now.getFullYear(); m=now.getMonth(); }
     recs=state.records.filter(r=>{const d=parseD(r.date);return d.getFullYear()===y&&d.getMonth()===m&&r.type===type;});
-    label='本月支出';
+    label=(date?`${y}年${m+1}月`:'本月')+(type==='expense'?'支出':'收入');
   }
   recs.sort((a,b)=> a.date<b.date?1:(a.date>b.date?-1:((b._t||0)-(a._t||0))));
   const sum=recs.reduce((s,r)=>s+r.amount,0);
@@ -1180,9 +1207,10 @@ function renderMonth(){
   const fixedCats=state.settings.fixedCategories;
   const fixed=recs.filter(r=>r.type==='expense'&&attrOf(r.category,r.sub)==='fixed').reduce((s,r)=>s+r.amount,0);
   const flex=exp-fixed;
+  const vmKey=fmt(viewMonth);
   $('#monthStats').innerHTML=`
-    <div class="stat"><div class="k">${I.coin} 月收入</div><div class="v green">${money(inc)}</div></div>
-    <div class="stat"><div class="k">${I.book} 月支出</div><div class="v red">${money(exp)}</div></div>
+    <div class="stat" data-scope="month" data-type="income" data-date="${vmKey}"><div class="k">${I.coin} 月收入</div><div class="v green">${money(inc)}</div></div>
+    <div class="stat" data-scope="month" data-type="expense" data-date="${vmKey}"><div class="k">${I.book} 月支出</div><div class="v red">${money(exp)}</div></div>
     <div class="stat"><div class="k">${I.star} 月结余</div><div class="v ${bal<0?'red':'green'}">${money(bal)}</div></div>`;
   $('#fixedSum').textContent=money(fixed);
   $('#flexSum').textContent=money(flex);
@@ -1194,6 +1222,37 @@ function renderMonth(){
   // 饼图：下拉选项 + 饼图（默认"全部类别"）
   renderCatPieSelect();
   renderCatPie();
+  // 日历
+  renderCalendar();
+}
+function renderCalendar(){
+  const y=viewMonth.getFullYear(), m=viewMonth.getMonth();
+  const first=new Date(y,m,1);
+  const startDow=first.getDay();
+  const daysIn=new Date(y,m+1,0).getDate();
+  const totals={};
+  state.records.forEach(r=>{
+    if(r.type!=='expense') return;
+    const d=parseD(r.date);
+    if(d.getFullYear()!==y||d.getMonth()!==m) return;
+    totals[d.getDate()]=(totals[d.getDate()]||0)+r.amount;
+  });
+  const todayKey=fmt(new Date());
+  let cells='';
+  for(let i=0;i<startDow;i++) cells+='<div class="cal-cell cal-empty"></div>';
+  for(let day=1;day<=daysIn;day++){
+    const key=fmt(new Date(y,m,day));
+    const t=totals[day]||0;
+    const isToday=key===todayKey;
+    const amtHtml = t>0
+      ? `<div class="cal-amt" data-date="${key}">${money(t)}</div>`
+      : `<div class="cal-amt cal-zero">¥0</div>`;
+    cells+=`<div class="cal-cell${isToday?' cal-today':''}"><div class="cal-day">${day}</div>${amtHtml}</div>`;
+  }
+  const wd=['日','一','二','三','四','五','六'];
+  $('#monthCal').innerHTML =
+    `<div class="cal-week">${wd.map(w=>`<div class="cal-w">${w}</div>`).join('')}</div>`+
+    `<div class="cal-grid">${cells}</div>`;
 }
 function catBars(recs,type,only,exclude){
   const exp=recs.filter(r=>r.type===type);
@@ -1483,7 +1542,12 @@ function bind(){
   // 首页统计卡片 → 打开对应记录清单
   $('#homeStats').addEventListener('click',e=>{
     const st=e.target.closest('.stat[data-scope]');
-    if(st) openList(st.dataset.scope, st.dataset.type);
+    if(st) openList(st.dataset.scope, st.dataset.type, st.dataset.date);
+  });
+  // 月度统计卡片 → 打开对应月份记录清单（尊重 viewMonth）
+  $('#monthStats').addEventListener('click',e=>{
+    const st=e.target.closest('.stat[data-scope]');
+    if(st) openList(st.dataset.scope, st.dataset.type, st.dataset.date);
   });
   // 记录清单弹窗
   $('#listClose').addEventListener('click',closeList);
@@ -1518,6 +1582,11 @@ function bind(){
   // month nav
   $('#prevMonth').addEventListener('click',()=>{viewMonth=new Date(viewMonth.getFullYear(),viewMonth.getMonth()-1,1);renderMonth();});
   $('#nextMonth').addEventListener('click',()=>{viewMonth=new Date(viewMonth.getFullYear(),viewMonth.getMonth()+1,1);renderMonth();});
+  // 日历：点击某天支出总额 → 打开当天支出明细
+  $('#monthCal').addEventListener('click',e=>{
+    const a=e.target.closest('.cal-amt[data-date]');
+    if(a) openList('day','expense',a.dataset.date);
+  });
   // 本月明细折叠（默认不展开）
   $('#monthDetailHead').addEventListener('click',()=>{
     const list=$('#monthList');
@@ -1633,7 +1702,7 @@ function renderAll(){ renderHome(); renderRecord(); renderWage(); renderMonth();
 /* ---------- 初始化图标 ---------- */
 function injectIcons(){
   const map={icHome:'home',icBook:'book',icCoin:'coin',icCal:'cal',icTarget:'target',icSlider:'slider',icGear:'gear',
-    icBook2:'book',icCal2:'cal',icCoin2:'coin',icBook3:'book',icPie:'pie',icStar:'star',icShield:'shield',
+    icBook2:'book',icCal2:'cal',icCal3:'cal',icCoin2:'coin',icBook3:'book',icPie:'pie',icStar:'star',icShield:'shield',
     icTrend:'trend',icSlider2:'slider',icBars:'bars',icData:'data',icBroom:'broom',icBroom2:'broom',
     icWarn:'warn',icDown:'down',icUp:'up',icTarget2:'target',icPlus:'plus',
     icCloud:'cloud',icRestore:'restore',icMinus:'minus',
